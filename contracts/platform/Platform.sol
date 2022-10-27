@@ -48,8 +48,6 @@ contract Platform is ProjectFactory, IPlatform, /*Ownable, Pausable,*/ Reentranc
 
     event PlatformCutChanged(uint oldValPromils, uint platformCutPromils);
 
-    error BadTeamDefinedVault(address projectVault_);
-
     error InsufficientFundsInContract( uint sumToExtract_, uint contractBalance );
 
     error InvalidProjectAddress(address projectAddress);
@@ -156,9 +154,9 @@ contract Platform is ProjectFactory, IPlatform, /*Ownable, Pausable,*/ Reentranc
         return platformCutPromils;
     } 
 
-    function _isAnApprovedVault(address projectVault_) internal override view returns(bool) {
-        return approvedVaults[address(projectVault_)];
-    }
+//    function _isAnApprovedVault(address projectVault_) internal override view returns(bool) {
+//        return approvedVaults[address(projectVault_)];
+//    }
 
 }
 

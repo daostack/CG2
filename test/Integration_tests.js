@@ -174,7 +174,7 @@ contract("Project", (accounts_) => {
       console.log("multi pldege eventstest completed");
   });
 
-   //------------
+  //------------
 
 
 
@@ -290,10 +290,12 @@ contract("Project", (accounts_) => {
 
           await verifyProjectMayNotBeReinitialized( milestones_);
 
-          let projectVaultAddr_ = await thisProjInstance.getVaultAddress();
+//          let projectVaultAddr_ = await thisProjInstance.getVaultAddress();
+          let projectVaultAddr_ = await platformInst.globalVault();
+          console.log(`==> projectVaultAddr_: ${projectVaultAddr_}`);
           thisVaultInstance = await Vault.at( projectVaultAddr_);
 
-          await verifyVaultMayNotBeReinitialized();
+          await verifyVaultEntryForProjectExists( thisVaultInstance, projectAddr_);
 
           await verifyActiveProject();
 
@@ -426,6 +428,12 @@ contract("Project", (accounts_) => {
         let pre_vaultBalance = await thisProjInstance.getVaultBalance();
 
         await verifyActiveProject();
+
+        let ptokAddr_ = await thisProjInstance.paymentTokenAddress();
+        console.log(`===>  ptokAddr_: ${ptokAddr_}`);
+
+        let ptokBalance_ = await thisProjInstance.getVaultBalance();
+        console.log(`===>  ptokBalance_: ${ptokBalance_}`);
 
         await thisProjInstance.onExternalApproverResolve( ind, succeeded, 'bla bla', { from: approverAddr });
 
@@ -602,18 +610,9 @@ contract("Project", (accounts_) => {
 
    ////////////////
 
-   async function verifyVaultMayNotBeReinitialized() {
-       if ( !revertReasonSupported) {
-           await expectRevert.unspecified(
-                 thisVaultInstance.initialize( addr1)
-           );
-
-       } else {
-           const expectedError = 'can only be initialized once';
-           await expectRevert(
-                    thisVaultInstance.initialize( addr1),
-                    expectedError );
-        }
+   async function verifyVaultEntryForProjectExists( thisVaultInstance, projectAddr_) {
+       let exists = await thisVaultInstance.projectEntryExists( projectAddr_);
+       assert.isTrue( exists, "vault: no proj entry");
    }
 
 

@@ -188,7 +188,7 @@ abstract contract MilestoneOwner {
         _verifyPrerequisiteWasMet( milestoneIndex_);
 
         if (approver_.fundingPTokTarget > 0) {
-            uint vaultBalance_ = _getProjectVault().vaultBalance();
+            uint vaultBalance_ = _getGlobalVault().vaultBalanceForCaller();
             if (vaultBalance_ >= approver_.fundingPTokTarget) {
                 emit MilestoneSucceededFunding( approver_.fundingPTokTarget, vaultBalance_);
                 return true;
@@ -237,7 +237,7 @@ abstract contract MilestoneOwner {
         uint platformCut_ = _calcPlatformCut(value_);
 
         // pass milestone funds from vault to teamWallet
-        require( address(this) == _getProjectVault().getOwner(), "proj contract must own vault");
+//        require( address(this) == _getGlobalVault().getOwner(), "proj contract must own vault");
 
         _transferPaymentTokenToTeam( value_, platformCut_);
     }
@@ -246,7 +246,7 @@ abstract contract MilestoneOwner {
     function _transferPaymentTokenToTeam( uint value_, uint platformCut_) internal {
         address platformAddr_ = _getPlatformAddress();
 
-        _getProjectVault().transferPaymentTokenToTeamWallet( value_, platformCut_, _getPlatformAddress());
+        _getGlobalVault().transferPaymentTokenToTeamWallet( value_, platformCut_, _getPlatformAddress());
 
         IPlatform( platformAddr_).onReceivePaymentTokens( paymentTokenAddress, platformCut_);
     }
@@ -283,7 +283,7 @@ abstract contract MilestoneOwner {
 
     function _verifyEnoughFundsInVault(uint milestoneIndex) private view {
         uint milestoneValue =  milestoneArr[ milestoneIndex].pTokValue;
-        uint fundsInVault_ = _getProjectVault().vaultBalance();
+        uint fundsInVault_ = _getGlobalVault().vaultBalanceForCaller();
         require( fundsInVault_ >= milestoneValue, "not enough funds in vault");
         //TODO >> consider problem of e.g. number-of-pledgers milestone completed with not enough funds in vault
     }
@@ -346,7 +346,7 @@ abstract contract MilestoneOwner {
     //-----
     function _onProjectSucceeded() internal virtual;
     function _onProjectFailed() internal virtual;
-    function _getProjectVault() internal virtual view returns(IVault);
+    function _getGlobalVault() internal virtual view returns(IVault);
     function _getNumPledgersSofar() internal virtual view returns(uint);
     function _getPlatformCutPromils() internal virtual view returns(uint);
     function _getPlatformAddress() internal virtual view returns(address);

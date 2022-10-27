@@ -4,6 +4,7 @@ pragma solidity 0.8.16;
 import "../@openzeppelin/contracts/utils/introspection/ERC165Storage.sol";
 import "../@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import "./ProjectVaultEntry.sol";
 import "../vault/IVault.sol";
 import "../platform/IPlatform.sol";
 import "../project/IProject.sol";
@@ -13,69 +14,66 @@ import "../utils/InitializedOnce.sol";
 
 contract CommonGoodVault is IVault, ERC165Storage, InitializedOnce {
 
-    event PTokPlacedInVault( uint sum);
+    event PTokPlacedInVault( address project, uint sum);
 
     event PTokTransferredToTeamWallet( uint sumToTransfer_, address indexed teamWallet_, uint platformCut_, address indexed platformAddr_);
 
-    event PTokTransferredToPledger( uint sumToTransfer_, address indexed pledgerAddr_);
+    event PTokTransferredToPledger( address project, uint sumToTransfer_, address indexed pledgerAddr_);
 
     error VaultOwnershipCannotBeTransferred( address _owner, address newOwner);
 
-    error VaultOwnershipCannotBeRenounced();
     //----
 
-    uint public numTokensInVault; // all deposits from all pledgers
+    mapping( address => ProjectVaultEntry) projectToVault; // all deposits from all pledgers
 
-    constructor() {
-        _initialize();
+
+    modifier existingProject() {
+        require( projectToVault[ msg.sender].exists, "no vault defined for address");
+        _;
     }
 
-    function initialize(address owner_) external override onlyIfNotInitialized { //@PUBFUNC called by platform //@CLONE
-        markAsInitialized(owner_);
-        _initialize();
+
+    function createProjectEntry(address projectAddress_, address pTokAddress_) external override onlyOwner {
+        // invokes by platform to add vault entry
+        require( projectAddress_ != address(0), "no project address");
+        require( pTokAddress_ != address(0), "no PTok address");
+        require( !projectToVault[ projectAddress_].exists, "vault already exist");
+        projectToVault[ projectAddress_] = ProjectVaultEntry({ exists: true, pTokAddress: pTokAddress_, numPToks: 0 });
     }
 
-    function _initialize() private {
-        _registerInterface( type(IVault).interfaceId);
-        numTokensInVault = 0;
+    function increaseBalance( uint numPaymentTokens_) external override existingProject {
+        _addPToksToCaller( numPaymentTokens_);
+        emit PTokPlacedInVault( msg.sender, numPaymentTokens_);
     }
 
-    function increaseBalance( uint numPaymentTokens_) external override onlyOwner {
-        verifyInitialized();
-        numTokensInVault += numPaymentTokens_;
-        emit PTokPlacedInVault( numPaymentTokens_);
-    }
 
     function transferPaymentTokensToPledger( address pledgerAddr_, uint numPaymentTokens_)
-                                                    external override onlyOwner returns(uint) {
+                                                    external override existingProject returns(uint) {
         // can only be invoked by connected project
         // @PROTECT: DoS, Re-entry
-        verifyInitialized();
 
         uint actuallyRefunded_ = _transferFromVaultTo( pledgerAddr_, numPaymentTokens_);
 
-        emit PTokTransferredToPledger( numPaymentTokens_, pledgerAddr_);
+        emit PTokTransferredToPledger( msg.sender, numPaymentTokens_, pledgerAddr_);
 
         return actuallyRefunded_;
     }
 
 
-    function _totalNumOwnedTokens() private view returns(uint) {
+    function _numPToksOwnedByGlobalVault() private view existingProject returns(uint) {
         address paymentTokenAddress_ = getPaymentTokenAddress();
         return IERC20( paymentTokenAddress_).balanceOf( address(this));
     }
 
 
     function transferPaymentTokenToTeamWallet (uint totalSumToTransfer_, uint platformCut_, address platformAddr_)
-                                                external override onlyOwner { //@PUBFUNC
-        verifyInitialized();
-
+                                                external override existingProject { //@PUBFUNC
         // can only be invoked by connected project
         // @PROTECT: DoS, Re-entry
         address teamWallet_ = getTeamWallet();
 
-        require( numTokensInVault >= totalSumToTransfer_, "insufficient numTokensInVault");
-        require( _totalNumOwnedTokens() >= totalSumToTransfer_, "insufficient totalOwnedTokens");
+        require( projectToVault[ msg.sender].numPToks >= totalSumToTransfer_, "insufficient PToks in vault");
+        require( _numPToksOwnedByGlobalVault() >= totalSumToTransfer_, "insufficient totalOwnedTokens");
 
         uint teamCut_ = totalSumToTransfer_ - platformCut_;
 
@@ -89,19 +87,28 @@ contract CommonGoodVault is IVault, ERC165Storage, InitializedOnce {
     }
 
 
-    function _transferFromVaultTo( address receiverAddr_, uint numTokensToTransfer) private returns(uint) {
-        uint actuallyTransferred_ = numTokensToTransfer;
+    function _transferFromVaultTo( address receiverAddr_, uint shouldBeTransferred_) private existingProject returns(uint) {
+        uint actuallyTransferred_ = shouldBeTransferred_;
 
-        if (actuallyTransferred_ > numTokensInVault) {
-            actuallyTransferred_ = numTokensInVault;
+        uint tokensInProjectVault_ = projectToVault[ msg.sender].numPToks;
+
+        if (actuallyTransferred_ > tokensInProjectVault_) {
+            actuallyTransferred_ = tokensInProjectVault_;
         }
 
-        numTokensInVault -= actuallyTransferred_;
+        uint numPToksOwnedByGlobalVault_ = _numPToksOwnedByGlobalVault();
+
+        if (actuallyTransferred_ > numPToksOwnedByGlobalVault_) {
+            actuallyTransferred_ = numPToksOwnedByGlobalVault_;
+        }
+
+        _subtractPToksFromCaller( actuallyTransferred_);
+
 
         address paymentTokenAddress_ = getPaymentTokenAddress();
 
-        bool ok = IERC20( paymentTokenAddress_).transfer( receiverAddr_, actuallyTransferred_);
-        require( ok, "Failed to transfer payment tokens");
+        bool transferred_ = IERC20( paymentTokenAddress_).transfer( receiverAddr_, actuallyTransferred_);
+        require( transferred_, "Failed to transfer payment tokens");
 
         return actuallyTransferred_;
     }
@@ -109,48 +116,50 @@ contract CommonGoodVault is IVault, ERC165Storage, InitializedOnce {
     //----
 
 
-    function getPaymentTokenAddress() private view returns(address) {
-        address project_ = getOwner();
-        return IProject(project_).getPaymentTokenAddress();
+    function getPaymentTokenAddress() private view existingProject returns(address) {
+        return projectToVault[ msg.sender].pTokAddress;
     }
 
-    function getTeamWallet() private view returns(address) {
-        address project_ = getOwner();
-        return IProject(project_).getTeamWallet();
-    }
-
-
-    function changeOwnership( address newOwner) public override( InitializedOnce, IVault) onlyOwnerOrNull {
-        return InitializedOnce.changeOwnership( newOwner);
-    }
-
-    function vaultBalance() public view override returns(uint) {
-        return numTokensInVault;
-    }
-
-    function totalAllPledgerDeposits() public view override returns(uint) {
-        return numTokensInVault;
+    function getTeamWallet() private view existingProject returns(address) {
+        return IProject( msg.sender).getTeamWallet();
     }
 
 
-    function decreaseTotalDepositsOnPledgerGraceExit(PledgeEvent[] calldata pledgerEvents) external override onlyOwner {
-        verifyInitialized();
+    function vaultBalanceForCaller() public view override existingProject returns(uint) {
+        return projectToVault[ msg.sender].numPToks;
+    }
 
-        uint totalForPledger_ = 0 ;
-        for (uint i = 0; i < pledgerEvents.length; i++) {
-            totalForPledger_ += pledgerEvents[i].sum;
-        }
-        numTokensInVault -= totalForPledger_;
+    function totalAllPledgerDepositsForCaller() public view override existingProject returns(uint) {
+        return vaultBalanceForCaller();
+    }
+
+    function projectEntryExists( address project_) external override view returns(bool) {
+        return projectToVault[ project_].exists;
     }
 
     function getOwner() public override( InitializedOnce, IVault) view returns (address) {
         return InitializedOnce.getOwner();
     }
 
+    function changeOwnership( address newOwner) public override( InitializedOnce, IVault) {
+        InitializedOnce.changeOwnership( newOwner);
+    }
+
+    function _addPToksToCaller( uint toAdd_) private {
+        projectToVault[ msg.sender].numPToks += toAdd_;
+    }
+
+    function _subtractPToksFromCaller( uint toSubtract_) private {
+        projectToVault[ msg.sender].numPToks -= toSubtract_;
+    }
+
+
 
     //------ retain connected project ownership (behavior declaration)
 
-    function renounceOwnership() public view override onlyOwner {
-        revert VaultOwnershipCannotBeRenounced();
-    }
+//    function renounceOwnership() public view override existingProject {
+//        require( projectToVault[msg.sender].numPToks == 0, "not empty");
+//        delete projectToVault[msg.sender];
+//    }
+
 }

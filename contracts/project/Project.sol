@@ -44,7 +44,7 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
 
     uint public minPledgedSum;
 
-    IVault public projectVault;
+    IVault public globalVault;
     IMintableOwnedERC20 public projectToken;
 
     uint public onChangeExitGracePeriod;
@@ -170,7 +170,7 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
 
         _updateProject( params_.milestones, params_.minPledgedSum);
 
-        projectVault = params_.vault;
+        globalVault = params_.vault;
         projectToken = params_.projectToken;
         platformCutPromils = params_.platformCutPromils;
         onChangeExitGracePeriod = params_.onChangeExitGracePeriod;
@@ -331,7 +331,7 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
             revert OperationCannotBeAppliedToRunningProject(projectState);
         }
 
-        uint vaultBalance_ = projectVault.vaultBalance();
+        uint vaultBalance_ = globalVault.vaultBalanceForCaller();
         if (vaultBalance_ > 0) {
             revert OperationCannotBeAppliedWhileFundsInVault(vaultBalance_);
         }
@@ -402,10 +402,12 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
 
         require( _paymentTokenAllowanceFromSender() >= numPaymentTokens_, "insufficient token allowance");
 
-        bool transferred_ = paymentToken_.transferFrom( pledger_, address(projectVault), numPaymentTokens_);
+
+        globalVault.increaseBalance( numPaymentTokens_);
+
+        bool transferred_ = paymentToken_.transferFrom( pledger_, address(globalVault), numPaymentTokens_);
         require( transferred_, "Failed to transfer payment tokens to vault");
 
-        projectVault.increaseBalance( numPaymentTokens_);
     }
 
 
@@ -601,7 +603,7 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
             revert PledgerGraceExitRefusedTooSoon( block.timestamp, pledgerExitAllowedStartTime);
         }
 
-        projectVault.decreaseTotalDepositsOnPledgerGraceExit( pledgerAddrToEventMap[ pledgerAddr_]);
+        //globalVault.decreaseTotalDepositsOnPledgerGraceExit( pledgerAddrToEventMap[ pledgerAddr_]);
 
         uint shouldBeRefunded_ = calcOnGracePeriodPTokRefund( pledgerAddr_);
 
@@ -649,12 +651,12 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
 
 
     function getVaultBalance() external override view returns(uint) {
-        return projectVault.vaultBalance();
+        return globalVault.vaultBalanceForCaller();
     }
 
-    function getVaultAddress() external view returns(address) {
-        return address(projectVault);
-    }
+//    function getVaultAddress() external view returns(address) {
+//        return address(globalVault);
+//    }
 
 //--------
 
@@ -705,7 +707,7 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
         //      https://medium.com/hackernoon/more-price-functions-for-token-bonding-curves-d42b325ca14b
         //      https://medium.com/coinmonks/token-bonding-curves-explained-7a9332198e0e
 
-        uint paymentTokenInVault = projectVault.vaultBalance() - alreadyRefunded_;
+        uint paymentTokenInVault = globalVault.vaultBalanceForCaller() - alreadyRefunded_;
         require( totalNumPledgeEvents > 0, "bad numActivePledgers");
         return paymentTokenInVault / totalNumPledgeEvents;
     }
@@ -713,7 +715,7 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
 
     function _pTokRefundToPledger( address pledgerAddr_, uint shouldBeRefunded_) private returns(uint) {
         // due to project failure or grace-period exit
-        uint actuallyRefunded_ = projectVault.transferPaymentTokensToPledger( pledgerAddr_, shouldBeRefunded_); //@PTokTransfer
+        uint actuallyRefunded_ = globalVault.transferPaymentTokensToPledger( pledgerAddr_, shouldBeRefunded_); //@PTokTransfer
 
         uint32 pledgerEnterTime_ = getPledgerEnterTime( pledgerAddr_);
 
@@ -748,8 +750,8 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
         return projectState == ProjectState.IN_PROGRESS;
     }
 
-    function _getProjectVault() internal override view returns(IVault) {
-        return projectVault;
+    function _getGlobalVault() internal override view returns(IVault) {
+        return globalVault;
     }
 
     function _getPlatformCutPromils() internal override view returns(uint) {
@@ -794,8 +796,8 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
 
         _terminateGracePeriod();
 
-        uint totalPTokInVault_ = projectVault.vaultBalance();
-        uint totalInvestedPTok_ = projectVault.totalAllPledgerDeposits();
+        uint totalPTokInVault_ = globalVault.vaultBalanceForCaller();
+        uint totalInvestedPTok_ = globalVault.totalAllPledgerDepositsForCaller();
 
         //zzzz create a refund factor that will be constant to all pledgers
         require( !onFailureRefundParams.exists, "onFailureRefundParams already set");
@@ -821,12 +823,12 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
     }
 
     function _transferAllVaultFundsToTeamWallet() private {
-        uint vaultBalance_ = projectVault.vaultBalance();
+        uint vaultBalance_ = globalVault.vaultBalanceForCaller();
 
         // pass platform cut to platform;
         uint platformCut_ = _calcPlatformCut( vaultBalance_);
 
-        //projectVault.transferPaymentTokenToTeamWallet( vaultBalance_, platformCut_, _getPlatformAddress());
+        //globalVault.transferPaymentTokenToTeamWallet( vaultBalance_, platformCut_, _getPlatformAddress());
         _transferPaymentTokenToTeam( vaultBalance_, platformCut_);
     }
 
@@ -842,7 +844,7 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable, Initial
 
     function _updateProject( Milestone[] memory newMilestones, uint newMinPledgedSum) private {
         // historical records (pledger list, successfulMilestoneIndexes...) and immuables
-        // (projectVault, projectToken, platformCutPromils, onChangeExitGracePeriod, pledgerGraceExitWaitTime)
+        // (globalVault, projectToken, platformCutPromils, onChangeExitGracePeriod, pledgerGraceExitWaitTime)
         // are not to be touched here
 
         // gilad: avoid min/max NumMilestones validations while in update

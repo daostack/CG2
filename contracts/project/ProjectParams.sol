@@ -9,7 +9,7 @@ import "../token/IMintableOwnedERC20.sol";
 struct ProjectParams {
     // used to circumvent 'Stack too deep' error when creating a _new project
 
-    address projectVault;
+//    address projectVault;
     address projectToken;
     address paymentToken;
 

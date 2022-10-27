@@ -11,15 +11,17 @@ interface IVault {
 
     function increaseBalance( uint numPaymentTokens_) external;
 
-    function vaultBalance() external view returns(uint);
+    function vaultBalanceForCaller() external view returns(uint);
 
-    function totalAllPledgerDeposits() external view returns(uint);
+    function totalAllPledgerDepositsForCaller() external view returns(uint);
 
-    function decreaseTotalDepositsOnPledgerGraceExit(PledgeEvent[] calldata pledgerEvents) external;
+//    function decreaseTotalDepositsOnPledgerGraceExit(PledgeEvent[] calldata pledgerEvents) external;
+
+    function projectEntryExists( address project_) external view returns(bool);
 
     function changeOwnership( address project_) external;
     function getOwner() external view returns (address);
 
-    function initialize( address owner_) external;
+    function createProjectEntry(address proj, address pTok) external;
 }
 

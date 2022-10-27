@@ -28,7 +28,7 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
 
     address immutable public projectTemplate;
 
-    address immutable public vaultTemplate;
+    IVault immutable public globalVault;
 
 
     uint public onChangeExitGracePeriod = 7 days; 
@@ -67,9 +67,12 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
 
     //----
 
-    constructor(address projectTemplate_, address vaultTemplate_) {
+    constructor(address projectTemplate_, address vaultTemplateAddr_) {
         projectTemplate = projectTemplate_;
-        vaultTemplate = vaultTemplate_;
+        globalVault = IVault( vaultTemplateAddr_);
+
+        require( globalVault.getOwner() == address(0), "global vault must not be pre-owned");
+        globalVault.changeOwnership( address(this)); // make platform owner of globalVault
         minNumMilestones = 1;
         maxNumMilestones = 400;
 
@@ -77,7 +80,7 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
 
     event ApprovedPaymentTokenChanged( address indexed paymentToken, bool isLegal);
 
-    event ProjectWasDeployed(uint indexed projectIndex, address indexed projectAddress, address indexed projectVault,
+    event ProjectWasDeployed(uint indexed projectIndex, address indexed projectAddress,
                             uint numMilestones, address projectToken, string tokenName, string tokenSymbol, uint tokenSupply,
                             uint onChangeExitGracePeriod, uint pledgerGraceExitWaitTime);
 
@@ -89,13 +92,11 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
                                   uint new_maxNumMilestones, uint indexed old_maxNumMilestones );
     //---
 
-    error ExternallyProvidedProjectVaultMustBeOwnedByPlatform( address vault_, address vaultOwner_);
+//    error ExternallyProvidedProjectVaultMustBeOwnedByPlatform( address vault_, address vaultOwner_);
 
     error ExternallyProvidedProjectTokenMustBeOwnedByPlatform( address projectToken, address actualOwner_);
 
     error ProjectTokenMustBeIMintableERC20( address projectToken_);
-
-    error NotAnApprovedVault(address projectVault_, address teamAddr);              
 
     error MilestoneInitialResultMustBeUnresolved(uint milestoneIndex, MilestoneResult milestoneResult);
 
@@ -136,13 +137,13 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
 
 
         //@gilad externl vault initially owned by platform address => after owned by project
-        if (params_.projectVault == address(0)) {
-            // deploy a dedicated DefaultVault contract
-            params_.projectVault = vaultTemplate.clone();
-
-        } else {
-            _validateExternalVault( IVault(params_.projectVault));
-        }
+//        if (params_.projectVault == address(0)) {
+//            // deploy a dedicated DefaultVault contract
+//            params_.projectVault = vaultTemplate.clone();
+//
+//        } else {
+//            _validateExternalVault( IVault(params_.projectVault));
+//        }
 
         if (params_.projectToken == address(0)) {
             // deploy a dedicated CommonGoodProjectToken contract
@@ -160,15 +161,15 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
         IProject project_ = IProject( projectTemplate.clone());
 
 
-        IVault(params_.projectVault).initialize( address(project_));
+//        IVault(params_.projectVault).initialize( address(project_));
 
 
-        require( IVault(params_.projectVault).getOwner() == address(project_), "Vault must be owned by project");
+//        require( IVault(params_.projectVault).getOwner() == address(project_), "Vault must be owned by project");
 
 
         ProjectInitParams memory initParams_ = ProjectInitParams( {
             projectTeamWallet: projectTeamWallet_,
-            vault: IVault(params_.projectVault),
+            vault: globalVault,
             milestones: milestones_,
             projectToken: projToken_,
             platformCutPromils: _getPlatformCutPromils(),
@@ -179,7 +180,10 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
             cid: params_.cid
         });
 
+        globalVault.createProjectEntry( address(project_), params_.paymentToken);
+
         project_.initialize( initParams_);
+
 
         require( project_.getOwner() == projectTeamWallet_, "Project must be owned by team");
         //-------------
@@ -197,7 +201,7 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
 
         require( projToken_.getOwner() == address(project_), "Project token must be owned by Platform");
 
-        emit ProjectWasDeployed( projectIndex_, address(project_), params_.projectVault, milestones_.length,
+        emit ProjectWasDeployed( projectIndex_, address(project_), milestones_.length,
                                  params_.projectToken, params_.tokenName, params_.tokenSymbol,
                                  params_.initialTokenSupply, onChangeExitGracePeriod, pledgerGraceExitWaitTime);
     }
@@ -215,24 +219,24 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
     }
 
 
-    function _validateExternalVault( IVault vault_) private view {
-        if ( !_isAnApprovedVault(address(vault_))) {
-            revert NotAnApprovedVault( address(vault_), msg.sender);
-        }
+//    function _validateExternalVault( IVault vault_) private view {
+//        if ( !_isAnApprovedVault(address(vault_))) {
+//            revert NotAnApprovedVault( address(vault_), msg.sender);
+//        }
+//
+//        if ( !_supportIVaultInterface(address(vault_))) {
+//            revert InvalidVault( address(vault_));
+//        }
+//
+//        address vaultOwner_ = IVault(vault_).getOwner();
+//        if ( vaultOwner_ != address(this)) {
+//            revert ExternallyProvidedProjectVaultMustBeOwnedByPlatform( address(vault_), vaultOwner_);
+//        }
+//    }
 
-        if ( !_supportIVaultInterface(address(vault_))) {
-            revert InvalidVault( address(vault_));
-        }
-
-        address vaultOwner_ = IVault(vault_).getOwner();
-        if ( vaultOwner_ != address(this)) {
-            revert ExternallyProvidedProjectVaultMustBeOwnedByPlatform( address(vault_), vaultOwner_);
-        }
-    }
-
-    function _supportIVaultInterface(address projectVault_) private view returns(bool) {
-        return ERC165Checker.supportsInterface( projectVault_, type(IVault).interfaceId);
-    }
+//    function _supportIVaultInterface(address projectVault_) private view returns(bool) {
+//        return ERC165Checker.supportsInterface( projectVault_, type(IVault).interfaceId);
+//    }
 
     function _validProjectAddress( address projectAddr_) internal view returns(bool) {
         return addressToProject[ projectAddr_].getProjectStartTime() > 0;
@@ -295,5 +299,5 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
 
 
     function _getPlatformCutPromils() internal virtual view returns(uint);
-    function _isAnApprovedVault(address vault) internal virtual view returns(bool);
+//    function _isAnApprovedVault(address vault) internal virtual view returns(bool);
 }
