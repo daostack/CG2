@@ -141,7 +141,7 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
             params_.projectVault = vaultTemplate.clone();
 
         } else {
-            _validateExternalVault( IVault(params_.projectVault));
+            _validateExternalVault( params_.projectVault);
         }
 
         if (params_.projectToken == address(0)) {
@@ -215,23 +215,27 @@ abstract contract ProjectFactory is BetaTestable, /*Ownable*/ Pausable {
     }
 
 
-    function _validateExternalVault( IVault vault_) private view {
-        if ( !_isAnApprovedVault(address(vault_))) {
-            revert NotAnApprovedVault( address(vault_), msg.sender);
+    function _validateExternalVault( address vaultAddr_) private view {
+//     @gilad consider uncommenting later
+//        if ( !_isAnApprovedVault(address(vault_))) {
+//            revert NotAnApprovedVault( address(vault_), msg.sender);
+//        }
+
+        if ( !_supportIVaultInterface(vaultAddr_)) {
+            revert InvalidVault( vaultAddr_);
         }
 
-        if ( !_supportIVaultInterface(address(vault_))) {
-            revert InvalidVault( address(vault_));
-        }
+        require( IVault(vaultAddr_).vaultBalance() == 0, "external vault not empty");
 
-        address vaultOwner_ = IVault(vault_).getOwner();
+        address vaultOwner_ = IVault(vaultAddr_).getOwner();
+
         if ( vaultOwner_ != address(this) && vaultOwner_ != address(0)) {
-            revert ExternallyProvidedProjectVaultMustBeOwnedByPlatform( address(vault_), vaultOwner_);
+            revert ExternallyProvidedProjectVaultMustBeOwnedByPlatform( vaultAddr_, vaultOwner_);
         }
     }
 
-    function _supportIVaultInterface(address projectVault_) private view returns(bool) {
-        return ERC165Checker.supportsInterface( projectVault_, type(IVault).interfaceId);
+    function _supportIVaultInterface(address vaultAddr_) private view returns(bool) {
+        return ERC165Checker.supportsInterface( vaultAddr_, type(IVault).interfaceId);
     }
 
     function _validProjectAddress( address projectAddr_) internal view returns(bool) {

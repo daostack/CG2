@@ -9,6 +9,8 @@ const truffleAssert = require('truffle-assertions');
 const Token   = artifacts.require("./contracts/token/CommonGoodProjectToken.sol");
 const Project = artifacts.require("./contracts/project/Project.sol");
 const Platform = artifacts.require("./contracts/platform/Platform.sol");
+const Vault = artifacts.require("./contracts/vault/CommonGoodVault.sol");
+const IMintableOwnedERC20 = artifacts.require("./contracts/token/IMintableOwnedERC20.sol");
 
 
 contract("Deployment", (accounts_) => {
@@ -21,6 +23,7 @@ contract("Deployment", (accounts_) => {
 
    let pTokInstance;
    let platformInst;
+   let vaultInst;
 
     const addr1 = accounts_[0];
     const addr2 = accounts_[1];
@@ -31,14 +34,14 @@ contract("Deployment", (accounts_) => {
    beforeEach( async function () {
         pTokInstance = await Token.deployed();
         platformInst = await Platform.deployed();
+        vaultInst = await Vault.deployed();
 
-        const vaultAddr_ = await platformInst.vaultTemplate();
         await platformInst.approvePTok( pTokInstance.address, true);
         await markProjectTeamAsBetaTester( addr1);
 
         console.log(`================================================================`);
         console.log(`       PTok: ${pTokInstance.address}`);
-        console.log(`       vault: ${vaultAddr_}`);
+        console.log(`       vault: ${vaultInst.address}`);
         console.log(`       platform: ${platformInst.address}`);
         console.log(`================================================================`);
    });
@@ -61,7 +64,7 @@ contract("Deployment", (accounts_) => {
 
           await createNewContract();
     });
-
+*/
 
     async function createNewContract() {
 
@@ -74,7 +77,7 @@ contract("Deployment", (accounts_) => {
 
           let params_ = { tokenName: "tok332",
                           tokenSymbol: "tk4",
-                          projectVault: ZERO_ADDR,
+                          projectVault: vaultInst.address,
                           paymentToken: pTokInstance.address,
                           minPledgedSum: MIN_PLEDGE_SUM,
                           initialTokenSupply: 100*MILLION,
