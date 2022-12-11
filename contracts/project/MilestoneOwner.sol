@@ -333,7 +333,7 @@ abstract contract MilestoneOwner is InitializedOnce {
         return milestoneArr.length;
     }
 
-    function getMilestoneDetails(uint ind_) external view returns( MilestoneResult, uint32, int32, uint, address, uint32, uint) {
+    function getMilestoneDetails(uint ind_) external view returns( MilestoneResult result, uint32 dueDate, int32 prereqInd, uint pTokValue, address externalApprover, uint32 targetNumPledgers, uint fundingPTokTarget) {
         Milestone storage mstone_ = milestoneArr[ind_];
         MilestoneApprover storage approver_ = mstone_.milestoneApprover;
         return (
