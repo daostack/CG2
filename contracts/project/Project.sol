@@ -167,6 +167,8 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable /*Initia
 
     event ProjectDetailedWereChanged(uint changeTime, uint endOfGracePeriod);
 
+    event ProjectMetadataWasChanged(bytes32 newCid, bytes32 oldCid);
+
     event MinPledgedSumWasSet(uint newMinPledgedSum, uint oldMinPledgedSum);
 
     event NewPledger(address indexed addr, uint indexed numPledgersSofar, uint indexed sum_);
@@ -291,6 +293,20 @@ contract Project is IProject, MilestoneOwner, ReentrancyGuard, Pausable /*Initia
 
         current_endOfGracePeriod = block.timestamp + onChangeExitGracePeriod;
         emit ProjectDetailedWereChanged(block.timestamp, current_endOfGracePeriod);
+    }
+
+/*
+ * @title updateProjectMetadata()
+ *
+ * @dev updating project details with milestone list and minPledgedSu, immediately entering pledger-exit grace period
+ *
+ * @event: ProjectMetadataWasChanged
+ */ //@DOC5
+    function updateProjectMetadata(bytes32 newCid) external onlyIfOwnerOrDelegate onlyIfProjectNotCompleted {
+        //@PUBFUNC
+        bytes32 oldCid = metadataCID;
+        metadataCID = newCid;
+        emit ProjectMetadataWasChanged(newCid, oldCid);
     }
 
 /*

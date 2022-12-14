@@ -245,6 +245,14 @@ contract("Project", (accounts_) => {
       console.log("multi pldege eventstest completed");
   });
 
+  it("can update project metadata", async () => {
+    let milestones_ = await offchainMilestones();
+    await createProjectContract( milestones_);
+    let newMetadataCid = '0xb6354b786b30f5e70a99f4bb052e691f40fed084735eb6de84cea727df55db68';
+    await thisProjInstance.updateProjectMetadata(newMetadataCid);
+    assert.equal(await thisProjInstance.metadataCID(), newMetadataCid, "bad metadataCid");
+  });
+
    //------------
 
 
